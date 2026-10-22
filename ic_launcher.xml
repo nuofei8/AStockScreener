@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  简单的矢量App图标：深蓝底色 + 红色阶梯上升柱状图（代表"资金驱动、上涨"）。
+  用vector drawable直接当图标用（minSdk 24起支持），不需要额外的PNG文件。
+  AndroidManifest里通过 android:icon="@drawable/ic_launcher" 引用。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 背景：深蓝色圆角方块 -->
+    <path
+        android:pathData="M0,24 C0,10.7 10.7,0 24,0 L84,0 C97.3,0 108,10.7 108,24 L108,84 C108,97.3 97.3,108 84,108 L24,108 C10.7,108 0,97.3 0,84 Z"
+        android:fillColor="#1565C0" />
+
+    <!-- 阶梯上升的柱状图，红色代表A股的"涨" -->
+    <path
+        android:pathData="M28,78 L40,78 L40,60 L28,60 Z"
+        android:fillColor="#FF5252" />
+    <path
+        android:pathData="M46,78 L58,78 L58,46 L46,46 Z"
+        android:fillColor="#FF5252" />
+    <path
+        android:pathData="M64,78 L76,78 L76,32 L64,32 Z"
+        android:fillColor="#FF5252" />
+
+    <!-- 右上角一个向上箭头，呼应"资金驱动"的上行含义 -->
+    <path
+        android:pathData="M60,30 L80,30 L80,50 L74,50 L74,42 L62,54 L58,50 L70,38 L60,38 Z"
+        android:fillColor="#FFD54F" />
+</vector>
