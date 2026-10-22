@@ -1,7 +1,0 @@
-<resources>
-    <string name="app_name">资金驱动选股</string>
-    <string name="not_refreshed_yet">尚未刷新</string>
-    <string name="auto_refresh">自动刷新</string>
-    <string name="profile_desc">画像：主板/创业板 · 现价≤8元 · 流通市值≤120亿 · 按主力净流入占比排序。免费数据源，延迟不保证，仅供参考，不构成投资建议。</string>
-    <string name="settings">设置</string>
-</resources>
