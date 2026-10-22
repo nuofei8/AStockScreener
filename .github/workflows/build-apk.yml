@@ -23,7 +23,8 @@ jobs:
       run: chmod +x gradlew || true
 
     - name: Generate Gradle Wrapper
-      run: gradle wrapper
+      run: gradle wrapper --gradle-version 8.1
+     
 
     - name: Build Debug APK
       run: ./gradlew assembleDebug
