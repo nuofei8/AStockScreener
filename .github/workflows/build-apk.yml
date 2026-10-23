@@ -1,6 +1,5 @@
 name: Build APK
 
-# 触发时机：推送代码到main分支时自动编译；也可以在GitHub网页上手动点"Run workflow"触发
 on:
   push:
     branches: [ main, master ]
@@ -20,13 +19,16 @@ jobs:
           java-version: '17'
 
       - name: 安装 Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
-      - name: 安装 Gradle
-        uses: gradle/actions/setup-gradle@v3
+      # 关键改动：强制使用指定的稳定版 Gradle，避免默认使用不兼容的最新版
+      - name: 安装并指定 Gradle 版本
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
 
-      - name: 编译 Debug APK
-        run: gradle assembleDebug --warning-mode all
+      - name: 清理并编译 Debug APK
+        run: gradle clean assembleDebug --no-daemon
 
       - name: 上传 APK 产物
         uses: actions/upload-artifact@v4
