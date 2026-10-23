@@ -1,6 +1,6 @@
 name: Build APK
 
-# 触发时机：推送代码到main分支时自动编译；也可以在GitHub网页上手动点"Run workflow"触发
+# 触发时机：推送代码到main分支时自动编译；也可以在GitHub网页上手动点“Run workflow”触发
 on:
   push:
     branches: [ main, master ]
@@ -22,11 +22,11 @@ jobs:
       - name: 安装 Android SDK
         uses: android-actions/setup-android@v4
 
-      - name: 安装 Gradle
-        uses: gradle/actions/setup-gradle@v3
+      - name: 赋予 gradlew 执行权限
+        run: chmod +x gradlew
 
-      - name: 编译 Debug APK
-        run: gradle assembleDebug --warning-mode all
+      - name: 清理并编译 Debug APK
+        run: ./gradlew clean assembleDebug --no-daemon
 
       - name: 上传 APK 产物
         uses: actions/upload-artifact@v4
