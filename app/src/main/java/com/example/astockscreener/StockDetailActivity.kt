@@ -1,78 +1,170 @@
 package com.example.astockscreener
 
-import android.annotation.SuppressLint
+import android.graphics.Color
 import android.os.Bundle
 import android.view.View
-import android.webkit.WebResourceError
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.Locale
 
 /**
- * 股票详情页：不自己画分时图/K线图（那需要额外的图表库+逐股K线数据接口，
- * 风险和工作量都更大），而是直接用 WebView 加载东方财富自己的手机行情页，
- * 该页面本身就自带分时图、K线图、买卖盘等完整信息，加载的是东财官方页面，
- * 图表渲染的准确性由东财自己保证，比自己拼接图表数据更可靠。
- *
- * ⚠️ 这个页面URL格式（wap.eastmoney.com/quote/stock/<市场>.<代码>.html）
- * 没有联网验证过，如果打开后显示404或者页面不对，大概率是URL格式变了，
- * 可以先用手机浏览器直接访问这个链接确认一下实际地址应该长什么样。
+ * 股票详情页：原生渲染，不走WebView嵌网页，所以没有广告、没有第三方推荐内容。
+ * 数据来源：腾讯免费行情接口(TencentQuoteApi) —— 实时报价 + 分时 + 日K线，
+ * 下方资讯列表复用已有的 NewsApi（东财公告接口）。
  */
 class StockDetailActivity : AppCompatActivity() {
+
+    private lateinit var tvPrice: TextView
+    private lateinit var tvChange: TextView
+    private lateinit var tvOpen: TextView
+    private lateinit var tvHigh: TextView
+    private lateinit var tvLow: TextView
+    private lateinit var tvVolume: TextView
+    private lateinit var tvPrevClose: TextView
+    private lateinit var progressBar: ProgressBar
+    private lateinit var tvDetailError: TextView
+    private lateinit var minuteChart: MinuteChartView
+    private lateinit var klineChart: KlineChartView
+    private lateinit var btnTabMinute: TextView
+    private lateinit var btnTabKline: TextView
+    private lateinit var newsContainer: LinearLayout
+
+    private lateinit var code: String
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_stock_detail)
 
-        val code = intent.getStringExtra(EXTRA_CODE) ?: run { finish(); return }
+        code = intent.getStringExtra(EXTRA_CODE) ?: run { finish(); return }
         val name = intent.getStringExtra(EXTRA_NAME) ?: code
 
         val toolbar = findViewById<Toolbar>(R.id.toolbarDetail)
         toolbar.title = "$name ($code)"
         toolbar.setNavigationOnClickListener { finish() }
 
-        val progressBar = findViewById<ProgressBar>(R.id.progressDetail)
-        val tvDetailError = findViewById<TextView>(R.id.tvDetailError)
-        val webView = findViewById<WebView>(R.id.webViewDetail)
-
-        setupWebView(webView, progressBar, tvDetailError)
-
-        val secid = SecidUtil.toSecid(code)
-        val url = "https://wap.eastmoney.com/quote/stock/$secid.html"
-        webView.loadUrl(url)
+        bindViews()
+        setupTabs()
+        loadAll()
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun setupWebView(webView: WebView, progressBar: ProgressBar, tvDetailError: TextView) {
-        webView.settings.javaScriptEnabled = true
-        webView.settings.domStorageEnabled = true
-        webView.settings.loadWithOverviewMode = true
-        webView.settings.useWideViewPort = true
+    private fun bindViews() {
+        tvPrice = findViewById(R.id.tvDetailPrice)
+        tvChange = findViewById(R.id.tvDetailChange)
+        tvOpen = findViewById(R.id.tvDetailOpen)
+        tvHigh = findViewById(R.id.tvDetailHigh)
+        tvLow = findViewById(R.id.tvDetailLow)
+        tvVolume = findViewById(R.id.tvDetailVolume)
+        tvPrevClose = findViewById(R.id.tvDetailPrevClose)
+        progressBar = findViewById(R.id.progressDetail)
+        tvDetailError = findViewById(R.id.tvDetailError)
+        minuteChart = findViewById(R.id.minuteChart)
+        klineChart = findViewById(R.id.klineChart)
+        btnTabMinute = findViewById(R.id.btnTabMinute)
+        btnTabKline = findViewById(R.id.btnTabKline)
+        newsContainer = findViewById(R.id.newsContainer)
+    }
 
-        webView.webViewClient = object : WebViewClient() {
-            override fun onPageFinished(view: WebView, url: String) {
-                progressBar.visibility = View.GONE
-            }
+    private fun setupTabs() {
+        btnTabMinute.setOnClickListener { showTab(isMinute = true) }
+        btnTabKline.setOnClickListener { showTab(isMinute = false) }
+        showTab(isMinute = true)
+    }
 
-            override fun onReceivedError(
-                view: WebView,
-                request: WebResourceRequest,
-                error: WebResourceError
-            ) {
-                if (request.isForMainFrame) {
-                    progressBar.visibility = View.GONE
-                    tvDetailError.visibility = View.VISIBLE
-                    tvDetailError.text = "页面加载失败：${error.description}\n" +
-                        "可能是URL格式不对，或者网络问题，用手机浏览器直接打开试试"
+    private fun showTab(isMinute: Boolean) {
+        minuteChart.visibility = if (isMinute) View.VISIBLE else View.GONE
+        klineChart.visibility = if (isMinute) View.GONE else View.VISIBLE
+        btnTabMinute.setBackgroundColor(if (isMinute) 0xFF1565C0.toInt() else Color.TRANSPARENT)
+        btnTabKline.setBackgroundColor(if (!isMinute) 0xFF1565C0.toInt() else Color.TRANSPARENT)
+    }
+
+    private fun loadAll() {
+        progressBar.visibility = View.VISIBLE
+        tvDetailError.visibility = View.GONE
+
+        lifecycleScope.launch {
+            try {
+                val quote = withContext(Dispatchers.IO) { TencentQuoteApi.fetchRealtimeQuote(code) }
+                val minutes = withContext(Dispatchers.IO) { TencentQuoteApi.fetchMinuteData(code) }
+                val klines = withContext(Dispatchers.IO) { TencentQuoteApi.fetchDailyKline(code) }
+                val titles = withContext(Dispatchers.IO) {
+                    runCatching { NewsApi.fetchRecentTitles(code, limit = 15) }.getOrDefault(emptyList())
                 }
+
+                progressBar.visibility = View.GONE
+
+                if (quote == null) {
+                    tvDetailError.visibility = View.VISIBLE
+                    tvDetailError.text = "实时行情拉取失败，可能是接口字段格式不对，或者网络问题"
+                } else {
+                    bindQuote(quote)
+                    minuteChart.setData(minutes, quote.prevClose)
+                }
+                klineChart.setData(klines)
+                bindNews(titles)
+            } catch (e: Exception) {
+                progressBar.visibility = View.GONE
+                tvDetailError.visibility = View.VISIBLE
+                tvDetailError.text = "加载失败：${e.message ?: "未知错误"}"
             }
         }
     }
+
+    private fun bindQuote(q: RealtimeQuote) {
+        val up = q.changePct >= 0
+        val color = if (up) 0xFFFF5252.toInt() else 0xFF4CAF50.toInt()
+
+        tvPrice.text = String.format(Locale.CHINA, "%.2f", q.price)
+        tvPrice.setTextColor(color)
+        tvChange.text = String.format(Locale.CHINA, "%+.2f  %+.2f%%", q.changeAmt, q.changePct)
+        tvChange.setTextColor(color)
+        tvOpen.text = "今开 ${fmt(q.open)}"
+        tvHigh.text = "最高 ${fmt(q.high)}"
+        tvLow.text = "最低 ${fmt(q.low)}"
+        tvVolume.text = "成交量 ${fmtVol(q.volume)}"
+        tvPrevClose.text = "昨收 ${fmt(q.prevClose)}"
+    }
+
+    private fun bindNews(titles: List<String>) {
+        newsContainer.removeAllViews()
+        if (titles.isEmpty()) {
+            val tv = TextView(this).apply {
+                text = "暂无相关资讯"
+                setTextColor(0xFF888888.toInt())
+                setPadding(0, 16, 0, 16)
+            }
+            newsContainer.addView(tv)
+            return
+        }
+        for (title in titles) {
+            val card = TextView(this).apply {
+                text = "· $title"
+                textSize = 14f
+                setTextColor(0xFFE0E0E0.toInt())
+                setPadding(20, 20, 20, 20)
+                setBackgroundColor(0xFF1E1E1E.toInt())
+            }
+            newsContainer.addView(card)
+            val spacer = View(this).apply {
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, 4
+                )
+            }
+            newsContainer.addView(spacer)
+        }
+    }
+
+    private fun fmt(v: Double): String =
+        if (v.isNaN()) "-" else String.format(Locale.CHINA, "%.2f", v)
+
+    private fun fmtVol(v: Double): String =
+        if (v.isNaN()) "-" else if (v >= 10000) String.format(Locale.CHINA, "%.1f万手", v / 10000) else "${v.toInt()}手"
 
     companion object {
         const val EXTRA_CODE = "extra_code"
