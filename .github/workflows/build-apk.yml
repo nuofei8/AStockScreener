@@ -20,7 +20,7 @@ jobs:
           java-version: '17'
 
       - name: 安装 Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v4
 
       - name: 编译 Debug APK
         run: gradle assembleDebug --warning-mode all
