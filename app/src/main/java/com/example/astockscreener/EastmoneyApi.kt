@@ -21,9 +21,30 @@ import java.util.concurrent.TimeUnit
 object EastmoneyApi {
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(8, TimeUnit.SECONDS)
-        .readTimeout(8, TimeUnit.SECONDS)
+        .connectTimeout(12, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(true) // 弱网下连接中断自动重试一次（OkHttp内置机制）
         .build()
+
+    /**
+     * 东财一次性返回全市场几千只股票数据，包体比较大，手机网络（尤其4G/5G切换、
+     * 信号不稳）下容易出现 "unexpected end of stream"（传输中途断开）。
+     * 这里包一层简单重试：失败后间隔重试，最多尝试 maxAttempts 次。
+     */
+    private inline fun <T> withRetry(maxAttempts: Int = 3, block: () -> T): T {
+        var lastError: Exception? = null
+        repeat(maxAttempts) { attempt ->
+            try {
+                return block()
+            } catch (e: Exception) {
+                lastError = e
+                if (attempt < maxAttempts - 1) {
+                    Thread.sleep(800L * (attempt + 1)) // 重试间隔递增：0.8s / 1.6s
+                }
+            }
+        }
+        throw lastError ?: IOException("未知错误")
+    }
 
     // fs 参数：m:0 t:6 深圳主板，m:0 t:80 创业板，m:1 t:2 上海主板，m:1 t:23 科创板。
     // 科创板数据也会被拉回来，但客户端用 BoardFilter 过滤掉，不影响结果。
@@ -40,7 +61,7 @@ object EastmoneyApi {
             "&fields=f12,f14,f2,f3,f20,f21,f62,f184,f69,f75"
 
     @Throws(IOException::class)
-    fun fetchFundFlowSnapshot(): List<StockItem> {
+    fun fetchFundFlowSnapshot(): List<StockItem> = withRetry {
         val request = Request.Builder()
             .url(URL)
             .header("User-Agent", "Mozilla/5.0 (Android; Mobile) AStockScreener/1.0")
@@ -99,7 +120,7 @@ object EastmoneyApi {
      * 用小字段集合，减少请求体积和解析耗时。
      */
     @Throws(IOException::class)
-    fun fetchPriceVolumeSnapshot(): Map<String, Pair<Double, Double>> {
+    fun fetchPriceVolumeSnapshot(): Map<String, Pair<Double, Double>> = withRetry {
         val request = Request.Builder()
             .url(SNAPSHOT_URL)
             .header("User-Agent", "Mozilla/5.0 (Android; Mobile) AStockScreener/1.0")
